@@ -120,6 +120,17 @@ impl Lexer {
 
             self.next();
         }
+
+        self.output_tokens.push(Token {
+            kind: TokenKind::Eof,
+            value: String::new(),
+            location: Location {
+                source_code_path: self.source_code_path.clone(),
+                line_number: self.current_line_number(),
+                start_col: self.current_col(),
+                end_col: self.current_col(),
+            },
+        })
     }
 
     fn next(&mut self) {
