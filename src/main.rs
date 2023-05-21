@@ -23,11 +23,22 @@ fn main() {
 
     let input_file_path = &args[1];
 
-    let mut lexer = Lexer::new(input_file_path.to_owned());
+    let source = {
+        if let Ok(source) = fs::read_to_string(input_file_path) {
+            source
+        } else {
+            println!("[Error]\nCould not open file");
+            return;
+        }
+    };
+
+    let mut lexer = Lexer::new(source.to_owned(), input_file_path.clone());
 
     lexer.lex();
 
-    let mut parser = Parser::new(lexer.tokens());
+    // dbg!(lexer.tokens());
+
+    let mut parser = Parser::new(lexer.output_tokens);
 
     parser.parse();
 

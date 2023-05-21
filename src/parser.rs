@@ -154,7 +154,7 @@ impl Parser {
 
         if next_token.kind != expected_kind {
             self.throw_err(format!(
-                "Expected a/an `{:?}` after `{}`, but found `{:?}`",
+                "Expected token type `{:?}` after `{}`, but found `{:?}`",
                 expected_kind,
                 self.current_token().value,
                 next_token.kind
@@ -182,24 +182,38 @@ impl Parser {
     }
 
     fn throw_err(&self, msg: String) {
-        println!("[Error]: {}", msg);
+        let current_token_location = self.current_token().location;
+        let line_number_spaces = " ".repeat(current_token_location.line_number.to_string().len());
+
+        dbg!(self.current_token());
+        println!("[Error]\n=> {}\n", msg);
         println!(
-            "[Location]: {}:{}",
-            self.current_token().location.line_number,
-            self.current_token().location.start_col
+            "[Location]: {}:{}:{}",
+            current_token_location.source_code_path,
+            current_token_location.line_number,
+            current_token_location.start_col
         );
 
-        let lines: Vec<String> = fs::read_to_string(self.current_token().location.source_code_path)
+        let lines: Vec<String> = fs::read_to_string(current_token_location.source_code_path)
             .unwrap()
             .split("\n")
             .map(String::from)
             .collect();
 
+
+        println!(" {} |", line_number_spaces);
         println!(
             " {} | {}",
-            self.current_token().location.line_number,
-            lines[self.current_token().location.line_number - 1].trim_start()
+            current_token_location.line_number,
+            lines[current_token_location.line_number - 1]
         );
+        println!(
+            " {} |{}{}",
+            line_number_spaces,
+            " ".repeat(current_token_location.start_col - 1),
+            "^".repeat(current_token_location.end_col - current_token_location.start_col)
+        );
+        println!(" {} |", line_number_spaces);
         process::exit(1);
     }
 }

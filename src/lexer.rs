@@ -1,201 +1,102 @@
-use std::{fs, process};
+use std;
 
-use crate::tokens::{Location, Token, TokenKind};
-
-const KEYWORDS: [&str; 2] = ["include", "print"];
-const TYPES: [&str; 1] = ["void"];
+use crate::tokens::{Token, TokenKind, Location};
 
 pub struct Lexer {
-    source_code_lines: Vec<String>,
-    source_code_chars: Vec<char>,
-    tokens: Vec<Token>,
-    current_char_index: usize,
+    pub output_tokens: Vec<Token>,
 
-    // Location
-    source_code_path: String,
+    source_code_length: usize,
+    source_code_chars: Vec<char>,
+    source_code_lines: Vec<String>,
+    
+    current_char_index: usize,
     line_start_indices: Vec<usize>,
+    source_code_path: String,
 }
 
 impl Lexer {
-    pub fn new(source_code_path: String) -> Self {
-        match fs::read_to_string(&source_code_path) {
-            Ok(source_code) => {
-                let source_code = source_code.replace("\r", "");
-                Self {
-                    source_code_lines: source_code.split("\n").map(String::from).collect(),
-                    source_code_chars: source_code.chars().collect(),
-                    tokens: Vec::new(),
-                    current_char_index: 0,
+    pub fn new(source_code: String, file_path: String) -> Self {        
+        Self {
+            output_tokens: Vec::new(),
 
-                    source_code_path,
-                    line_start_indices: vec![0],
-                }
-            }
+            source_code_length: source_code.len(),
+            source_code_chars: source_code.chars().collect(),
+            source_code_lines: source_code.split("\n").map(String::from).collect(),
 
-            Err(err) => {
-                println!("[Error] Could not read input file `{}`", source_code_path);
-                println!("[Reason] {}", err);
-                process::exit(1);
-            }
+            current_char_index: 0,
+            line_start_indices: vec![0],
+            source_code_path: file_path,
         }
-    }
-
-    pub fn tokens(&self) -> Vec<Token> {
-        self.tokens.to_owned()
     }
 
     pub fn lex(&mut self) {
         while self.is_not_eof() {
+            if self.current_line().starts_with("//") { self.next(); continue; }
+
             match self.current_char() {
-                // Identifiers
-                'a'..='z' | 'A'..='Z' | '_' => {
-                    let mut eaten_identifier = String::new();
-                    let start_col = self.current_col();
-                    while self.current_char().is_alphanumeric() {
-                        eaten_identifier.push(self.current_char());
-                        self.advance();
-                    }
-                    let end_col = self.current_col();
-
-                    self.current_char_index -= 1;
-
-                    let mut kind = TokenKind::Identifier;
-
-                    if KEYWORDS.contains(&eaten_identifier.as_str()) {
-                        kind = TokenKind::Keyword;
-                    } else if TYPES.contains(&eaten_identifier.as_str()) {
-                        kind = TokenKind::Type;
-                    }
-
-                    self.push_token(kind, eaten_identifier, start_col, end_col);
-                }
-
-                // Strings
-                '"' => {
-                    let mut eaten_string = String::new();
-                    let start_col = self.current_col();
-
-                    self.advance();
-                    while self.current_char() != '"' {
-                        eaten_string.push(self.current_char());
-
-                        self.advance();
-                        if self.is_eof() {
-                            self.throw_err(format!(
-                                    "Unended string since column {} at line {}",
-                                    start_col, self.current_line_number()
-                            ));
-                        }
-                    }
-
-                    let end_col = self.current_col();
-
-                    self.push_token(TokenKind::String, eaten_string, start_col, end_col);
-                }
-
-                ////////////////////////////////////////////////////
-                ';' => {
-                    self.push_token(
-                        TokenKind::Semicolon,
-                        self.current_char().to_string(),
-                        self.current_col(),
-                        self.current_col(),
-                    );
-                }
-
-                ',' => {
-                    self.push_token(
-                        TokenKind::Comma,
-                        self.current_char().to_string(),
-                        self.current_col(),
-                        self.current_col(),
-                    );
-                }
-                '(' => {
-                    self.push_token(
-                        TokenKind::OParen,
-                        self.current_char().to_string(),
-                        self.current_col(),
-                        self.current_col(),
-                    );
-                }
-
-                ')' => {
-                    self.push_token(
-                        TokenKind::CParen,
-                        self.current_char().to_string(),
-                        self.current_col(),
-                        self.current_col(),
-                    );
-                }
-
-                '{' => {
-                    self.push_token(
-                        TokenKind::OCurly,
-                        self.current_char().to_string(),
-                        self.current_col(),
-                        self.current_col(),
-                    );
-                }
-
-                '}' => {
-                    self.push_token(
-                        TokenKind::CCurly,
-                        self.current_char().to_string(),
-                        self.current_col(),
-                        self.current_col(),
-                    );
-                }
-
-                ////////////////////////////////////////////////////
-                '\n' => {
-                    self.line_start_indices.push(self.current_char_index);
-                }
-                
                 c if c.is_whitespace() => {}
 
-                _ => self.throw_err(format!("Unknown character `{}`", self.current_char())),
+                c if c.is_alphabetic() => {
+                    self.eat_identifier();
+                }
+
+                other => {
+                    self.throw_err(format!(
+                        "Unexpected character '{}'",
+                        other
+                    ))
+                }
             }
 
-            self.advance();
+            self.next();
+        }
+    }
+
+    fn next(&mut self) {
+        self.current_char_index += 1;
+
+        if self.is_not_eof() && self.current_char() == '\n' {
+            self.line_start_indices.push(self.current_char_index);
+            self.next();
+        }
+    }
+
+    fn eat_identifier(&mut self) {
+        let mut eaten_identifier = String::new();
+        let start_col = self.current_col();
+
+        while self.current_char().is_alphanumeric() {
+            eaten_identifier.push(self.current_char());
+            self.current_char_index += 1;
         }
 
-        self.push_token(
-            TokenKind::Eof,
-            String::new(),
-            self.current_col(),
-            self.current_col(),
-        )
-    }
+        self.current_char_index -= 1;
 
-    fn is_eof(&self) -> bool {
-        self.current_char_index == self.source_code_chars.len()
-    }
-
-    fn is_not_eof(&self) -> bool {
-        !self.is_eof()
-    }
-
-    #[inline]
-    fn current_char(&self) -> char {
-        self.source_code_chars[self.current_char_index].to_owned()
-    }
-
-    fn advance(&mut self) {
-        self.current_char_index += 1;
-    }
-
-    fn push_token(&mut self, kind: TokenKind, value: String, start_col: usize, end_col: usize) {
-        self.tokens.push(Token {
-            kind,
-            value,
+        self.output_tokens.push(Token {
+            kind: TokenKind::Identifier,
+            value: eaten_identifier,
             location: Location {
                 source_code_path: self.source_code_path.clone(),
                 line_number: self.current_line_number(),
-                start_col,
-                end_col,
-            },
-        })
+                start_col: start_col,
+                end_col: self.current_col(),
+            }
+        });
+    }
+
+    #[inline]
+    fn is_not_eof(&self) -> bool {
+        self.current_char_index < self.source_code_length
+    }
+
+    #[inline]
+    fn is_eof(&self) -> bool {
+        self.current_char_index + 1 >= self.source_code_length
+    }
+
+    #[inline]
+    fn current_char(&mut self) -> char {
+        self.source_code_chars[self.current_char_index].clone()
     }
 
     #[inline]
