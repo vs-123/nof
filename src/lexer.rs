@@ -1,6 +1,6 @@
 use std;
 
-use crate::tokens::{Token, TokenKind, Location};
+use crate::tokens::{Token, TokenKind, Location, KEYWORDS, TYPES};
 
 pub struct Lexer {
     pub output_tokens: Vec<Token>,
@@ -148,7 +148,15 @@ impl Lexer {
         self.current_char_index -= 1;
 
         self.output_tokens.push(Token {
-            kind: TokenKind::Identifier,
+            kind: {
+                if KEYWORDS.contains(&eaten_identifier.as_str()) {
+                    TokenKind::Keyword
+                } else if TYPES.contains(&eaten_identifier.as_str()) {
+                    TokenKind::Type
+                } else {
+                    TokenKind::Identifier
+                }
+            },
             value: eaten_identifier,
             location: Location {
                 start_col,

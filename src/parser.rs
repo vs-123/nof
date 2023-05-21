@@ -1,7 +1,7 @@
 use std::{fs, os, process};
 
 use crate::{
-    ast::Node,
+    ast::{Node, NodeKind},
     tokens::{Token, TokenKind},
 };
 
@@ -38,19 +38,10 @@ impl Parser {
                         self.expect_kind(TokenKind::Semicolon);
                         self.advance();
 
-                        self.push_node(Node::Include(include_thing));
-                    }
-
-                    "print" => {
-                        self.expect_kind(TokenKind::String);
-                        self.advance();
-
-                        let print_thing = self.current_token().value;
-
-                        self.expect_kind(TokenKind::Semicolon);
-                        self.advance();
-
-                        self.push_node(Node::Print(print_thing));
+                        self.push_node(Node {
+                            kind: NodeKind::Include(include_thing),
+                            location: self.current_token().location,
+                        });
                     }
 
                     _ => self.throw_err(format!(
@@ -59,7 +50,12 @@ impl Parser {
                     )),
                 },
 
-                // Functions or variables
+                // Function or variable **declaration**
+                // E.g. void main() {
+                //      ^^^^
+                // Or
+                // int x = 5;
+                // ^^^
                 TokenKind::Type => {
                     let thing_type = self.current_token().value;
                     let mut parameters: Vec<(String, String)> = Vec::new();
@@ -118,17 +114,54 @@ impl Parser {
                                 .map(|e| Box::new(e.clone()))
                                 .collect();
 
-                            self.push_node(Node::FuncDecl(thing_type, thing_name, body));
+                            self.push_node(Node {
+                                kind: NodeKind::FuncDecl(thing_type, thing_name, body),
+                                location: self.current_token().location,
+                            });
                         }
 
-                        _ => {
-                            unreachable!()
-                        }
+                        _ => self.throw_err(format!(
+                            "Eat my dust lol",
+                        )),
                     }
                 }
 
+                // Function calls and Identifiers
+                // E.g. print();
+                //      ^^^^^
+                TokenKind::Identifier => {
+                    let function_name = self.current_token().value;
+
+                    self.expect_kind(TokenKind::OParen);
+                    self.advance();
+
+                    let mut parameters = Vec::new();
+
+                    while self.peek().kind != TokenKind::CParen {
+                        self.expect_either(&[TokenKind::Identifier, TokenKind::String]);
+                        self.advance();
+
+                        let parameter = Box::new(self.match_token_kind(self.current_token()));
+
+                        parameters.push(parameter);
+
+                        if self.peek().kind == TokenKind::Comma {
+                            self.advance();
+                        }
+                    }
+
+                    self.advance();
+                    self.expect_kind(TokenKind::Semicolon);
+                    self.advance();
+
+                    self.output_nodes.push(Node {
+                        kind: NodeKind::FuncCall(function_name, parameters),
+                        location: self.current_token().location,
+                    });
+                }
+
                 _ => self.throw_err(format!(
-                    "Token `{}` (type: `{:?}`) not implemented",
+                    "Token `{}` (kind: `{:?}`) not implemented",
                     self.current_token().value,
                     self.current_token().kind
                 )),
@@ -137,6 +170,21 @@ impl Parser {
                 break;
             }
             self.advance();
+        }
+    }
+
+    fn match_token_kind(&self, token: Token) -> NodeKind {
+        match token.kind {
+            TokenKind::Identifier => NodeKind::Identifier(token.value),
+
+            other => {
+                self.throw_err(format!(
+                    "Expected either of kinds Identifier, String, etc., found {:?}",
+                    other
+                ));
+
+                unreachable!();
+            }
         }
     }
 
@@ -154,8 +202,21 @@ impl Parser {
 
         if next_token.kind != expected_kind {
             self.throw_err(format!(
-                "Expected token type `{:?}` after `{}`, but found `{:?}`",
+                "Expected token kind `{:?}` after `{}`, but found `{:?}`",
                 expected_kind,
+                self.current_token().value,
+                next_token.kind
+            ))
+        }
+    }
+
+    fn expect_either(&self, expected_kinds: &[TokenKind]) {
+        let next_token = self.peek();
+
+        if !expected_kinds.contains(&next_token.kind) {
+            self.throw_err(format!(
+                "Expected either of token kinds `{:?}` after `{}`, but found `{:?}`",
+                expected_kinds,
                 self.current_token().value,
                 next_token.kind
             ))
@@ -185,8 +246,7 @@ impl Parser {
         let current_token_location = self.current_token().location;
         let line_number_spaces = " ".repeat(current_token_location.line_number.to_string().len());
 
-        dbg!(self.current_token());
-        println!("[Error]\n=> {}\n", msg);
+        println!("[Error]\n{}\n", msg);
         println!(
             "[Location]: {}:{}:{}",
             current_token_location.source_code_path,
@@ -213,7 +273,6 @@ impl Parser {
             " ".repeat(current_token_location.start_col),
             "^".repeat(current_token_location.end_col - current_token_location.start_col + 1)
         );
-        println!(" {} |", line_number_spaces);
         process::exit(1);
     }
 }

@@ -1,3 +1,6 @@
+pub const KEYWORDS: [&str; 1] = ["include"];
+pub const TYPES: [&str; 1] = ["void"];
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     Identifier,
