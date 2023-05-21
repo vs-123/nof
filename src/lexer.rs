@@ -1,6 +1,6 @@
 use std;
 
-use crate::tokens::{Token, TokenKind, Location, KEYWORDS, TYPES};
+use crate::tokens::{Location, Token, TokenKind, KEYWORDS, TYPES};
 
 pub struct Lexer {
     pub output_tokens: Vec<Token>,
@@ -8,14 +8,14 @@ pub struct Lexer {
     source_code_length: usize,
     source_code_chars: Vec<char>,
     source_code_lines: Vec<String>,
-    
+
     current_char_index: usize,
     line_start_indices: Vec<usize>,
     source_code_path: String,
 }
 
 impl Lexer {
-    pub fn new(source_code: String, file_path: String) -> Self {     
+    pub fn new(source_code: String, file_path: String) -> Self {
         let source_code_chars: Vec<char> = source_code.chars().collect();
         Self {
             output_tokens: Vec::new(),
@@ -32,7 +32,10 @@ impl Lexer {
 
     pub fn lex(&mut self) {
         while self.is_not_eof() {
-            if self.current_line().starts_with("//") { self.next(); continue; }
+            if self.current_line().starts_with("//") {
+                self.next();
+                continue;
+            }
 
             match self.current_char() {
                 c if c.is_whitespace() => {}
@@ -54,7 +57,7 @@ impl Lexer {
                             line_number: self.current_line_number(),
                             start_col: self.current_col(),
                             end_col: self.current_col(),
-                        }
+                        },
                     });
                 }
 
@@ -67,7 +70,7 @@ impl Lexer {
                             line_number: self.current_line_number(),
                             start_col: self.current_col(),
                             end_col: self.current_col(),
-                        }
+                        },
                     });
                 }
 
@@ -80,7 +83,7 @@ impl Lexer {
                             line_number: self.current_line_number(),
                             start_col: self.current_col(),
                             end_col: self.current_col(),
-                        }
+                        },
                     });
                 }
 
@@ -93,7 +96,7 @@ impl Lexer {
                             line_number: self.current_line_number(),
                             start_col: self.current_col(),
                             end_col: self.current_col(),
-                        }
+                        },
                     });
                 }
 
@@ -106,16 +109,24 @@ impl Lexer {
                             line_number: self.current_line_number(),
                             start_col: self.current_col(),
                             end_col: self.current_col(),
-                        }
+                        },
                     });
                 }
 
-                other => {
-                    self.throw_err(format!(
-                        "Unexpected character '{}'",
-                        other
-                    ))
+                ',' => {
+                    self.output_tokens.push(Token {
+                        kind: TokenKind::Comma,
+                        value: ",".to_string(),
+                        location: Location {
+                            source_code_path: self.source_code_path.clone(),
+                            line_number: self.current_line_number(),
+                            start_col: self.current_col(),
+                            end_col: self.current_col(),
+                        },
+                    });
                 }
+
+                other => self.throw_err(format!("Unexpected character '{}'", other)),
             }
 
             self.next();
@@ -159,14 +170,12 @@ impl Lexer {
         self.current_char_index -= 1;
 
         self.output_tokens.push(Token {
-            kind: {
-                if KEYWORDS.contains(&eaten_identifier.as_str()) {
-                    TokenKind::Keyword
-                } else if TYPES.contains(&eaten_identifier.as_str()) {
-                    TokenKind::Type
-                } else {
-                    TokenKind::Identifier
-                }
+            kind: if KEYWORDS.contains(&eaten_identifier.as_str()) {
+                TokenKind::Keyword
+            } else if TYPES.contains(&eaten_identifier.as_str()) {
+                TokenKind::Type
+            } else {
+                TokenKind::Identifier
             },
             value: eaten_identifier,
             location: Location {
@@ -189,11 +198,13 @@ impl Lexer {
         while self.current_char() != '"' {
             eaten_string.push(self.current_char());
             if self.is_eof() {
-                self.throw_err_custom_pointer(format!(
-                    "Unended string since line {}, column {}\n\n[Help]\n{}",
-                    start_line, start_col,
-                    "Consider adding a '\"' when the string ends."
-                ), start_col);
+                self.throw_err_custom_pointer(
+                    format!(
+                        "Unended string since line {}, column {}\n\n[Help]\n{}",
+                        start_line, start_col, "Consider adding a '\"' when the string ends."
+                    ),
+                    start_col,
+                );
             }
             self.current_char_index += 1;
         }

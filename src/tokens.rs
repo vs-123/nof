@@ -6,10 +6,9 @@ pub enum TokenKind {
     Identifier,
     String,
     Number,
+    Type,
 
     Keyword,
-
-    Type,
 
     OParen,
     CParen,

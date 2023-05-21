@@ -1,4 +1,4 @@
-use crate::tokens::{Token, TokenKind, Location};
+use crate::tokens::{Location, Token, TokenKind};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NodeKind {

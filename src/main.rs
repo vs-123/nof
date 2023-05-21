@@ -42,5 +42,5 @@ fn main() {
 
     parser.parse();
 
-    dbg!(parser.parsed());
+    dbg!(parser.output_nodes);
 }

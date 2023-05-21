@@ -6,10 +6,10 @@ use crate::{
 };
 
 pub struct Parser {
+    pub output_nodes: Vec<Node>,
+
     input_tokens: Vec<Token>,
     current_token_index: usize,
-
-    output_nodes: Vec<Node>,
 }
 
 impl Parser {
@@ -21,174 +21,70 @@ impl Parser {
         }
     }
 
-    pub fn parsed(&self) -> Vec<Node> {
-        self.output_nodes.to_owned()
-    }
-
     pub fn parse(&mut self) {
         while self.is_not_eof() {
             match self.current_token().kind {
-                TokenKind::Keyword => match self.current_token().value.as_str() {
-                    "include" => {
-                        self.expect_kind(TokenKind::Identifier);
-                        self.advance();
-
-                        let include_thing = self.current_token().value;
-
-                        self.expect_kind(TokenKind::Semicolon);
-                        self.advance();
-
-                        self.push_node(Node {
-                            kind: NodeKind::Include(include_thing),
-                            location: self.current_token().location,
-                        });
-                    }
-
-                    _ => self.throw_err(format!(
-                        "Keyword `{}` not implemented",
-                        self.current_token().value
-                    )),
-                },
-
-                // Function or variable **declaration**
-                // E.g. void main() {
-                //      ^^^^
-                // Or
-                // int x = 5;
-                // ^^^
                 TokenKind::Type => {
-                    let thing_type = self.current_token().value;
-                    let mut parameters: Vec<(String, String)> = Vec::new();
-
+                    let type_name = self.current_token().value;
                     self.expect_kind(TokenKind::Identifier);
-                    self.advance();
+                    self.next();
+                    let name = self.current_token().value;
 
-                    let thing_name = self.current_token().value;
-
+                    self.expect_either(&[TokenKind::OParen, TokenKind::Identifier]);
                     match self.peek().kind {
                         // Function
                         TokenKind::OParen => {
-                            self.advance();
-
-                            while self.peek().kind != TokenKind::CParen {
-                                self.expect_kind(TokenKind::Type);
-                                self.advance();
-
-                                let param_type = self.current_token().value;
-
-                                self.expect_kind(TokenKind::Identifier);
-                                self.advance();
-
-                                let param_name = self.current_token().value;
-
-                                parameters.push((param_type, param_name));
-
-                                if self.peek().kind == TokenKind::Comma {
-                                    self.advance();
-                                }
-                            }
-
-                            self.expect_kind(TokenKind::CParen);
-                            self.advance();
-
-                            self.expect_kind(TokenKind::OCurly);
-                            self.advance();
-
-                            // Block
-
-                            let mut body: Vec<Token> = Vec::new();
-
-                            self.advance();
-
-                            while self.current_token().kind != TokenKind::CCurly {
-                                body.push(self.current_token());
-                                self.advance();
-                            }
-
-                            let mut block_parser = Parser::new(body);
-                            block_parser.parse();
-
-                            let body = block_parser
-                                .parsed()
-                                .iter()
-                                .map(|e| Box::new(e.clone()))
-                                .collect();
-
-                            self.push_node(Node {
-                                kind: NodeKind::FuncDecl(thing_type, thing_name, body),
-                                location: self.current_token().location,
-                            });
+                            self.parse_function();
                         }
 
-                        _ => self.throw_err(format!(
-                            "Eat my dust lol",
-                        )),
+                        // Variable
+                        TokenKind::Identifier => {
+                            todo!()
+                        }
+
+                        _ => unreachable!(),
                     }
                 }
 
-                // Function calls and Identifiers
-                // E.g. print();
-                //      ^^^^^
-                TokenKind::Identifier => {
-                    let function_name = self.current_token().value;
+                other => self.throw_err(format!("Use of unimplemented token kind {:?}", other)),
+            }
 
-                    self.expect_kind(TokenKind::OParen);
-                    self.advance();
+            self.next();
+        }
+    }
 
-                    let mut parameters = Vec::new();
+    fn parse_function(&mut self) {
+        self.next();
 
-                    while self.peek().kind != TokenKind::CParen {
-                        self.expect_either(&[TokenKind::Identifier, TokenKind::String]);
-                        self.advance();
+        let mut parameters: Vec<(String, String)> = Vec::<(String, String)>::new();
 
-                        let parameter = Box::new(self.match_token_kind(self.current_token()));
+        self.expect_either(&[TokenKind::Type, TokenKind::CParen]);
+        loop {
+            self.next();
 
-                        parameters.push(parameter);
+            match self.current_token().kind {
+                TokenKind::Type => {
+                    let param_type = self.current_token().value;
+                    self.expect_kind(TokenKind::Identifier);
+                    self.next();
 
-                        if self.peek().kind == TokenKind::Comma {
-                            self.advance();
-                        }
-                    }
-
-                    self.advance();
-                    self.expect_kind(TokenKind::Semicolon);
-                    self.advance();
-
-                    self.output_nodes.push(Node {
-                        kind: NodeKind::FuncCall(function_name, parameters),
-                        location: self.current_token().location,
-                    });
+                    let param_name = self.current_token().value;
                 }
 
-                _ => self.throw_err(format!(
-                    "Token `{}` (kind: `{:?}`) not implemented",
-                    self.current_token().value,
-                    self.current_token().kind
-                )),
+                TokenKind::CParen => {
+                    break;
+                }
+
+                TokenKind::Comma => {}
+
+                _ => unreachable!(),
             }
-            if self.current_token_index == self.input_tokens.len() - 1 {
-                break;
-            }
-            self.advance();
+
+            self.expect_either(&[TokenKind::Type, TokenKind::CParen, TokenKind::Comma]);
         }
     }
 
-    fn match_token_kind(&self, token: Token) -> NodeKind {
-        match token.kind {
-            TokenKind::Identifier => NodeKind::Identifier(token.value),
-
-            other => {
-                self.throw_err(format!(
-                    "Expected either of kinds Identifier, String, etc., found {:?}",
-                    other
-                ));
-
-                unreachable!();
-            }
-        }
-    }
-
-    fn advance(&mut self) {
+    fn next(&mut self) {
         self.current_token_index += 1;
     }
 
@@ -234,7 +130,7 @@ impl Parser {
 
     #[inline]
     fn is_not_eof(&self) -> bool {
-        !self.is_eof()
+        self.current_token().kind != TokenKind::Eof
     }
 
     #[inline]
@@ -259,7 +155,6 @@ impl Parser {
             .split("\n")
             .map(String::from)
             .collect();
-
 
         println!(" {} |", line_number_spaces);
         println!(
