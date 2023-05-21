@@ -13,9 +13,7 @@ pub struct Lexer {
 
     // Location
     source_code_path: String,
-    current_line_number: usize,
-    current_col: usize,
-    is_eof: bool,
+    line_start_indices: Vec<usize>,
 }
 
 impl Lexer {
@@ -30,10 +28,7 @@ impl Lexer {
                     current_char_index: 0,
 
                     source_code_path,
-                    current_line_number: 1,
-                    current_col: 1,
-
-                    is_eof: false,
+                    line_start_indices: vec![0],
                 }
             }
 
@@ -55,15 +50,14 @@ impl Lexer {
                 // Identifiers
                 'a'..='z' | 'A'..='Z' | '_' => {
                     let mut eaten_identifier = String::new();
-                    let start_col = self.current_col;
+                    let start_col = self.current_col();
                     while self.current_char().is_alphanumeric() {
                         eaten_identifier.push(self.current_char());
                         self.advance();
                     }
-                    let end_col = self.current_col;
+                    let end_col = self.current_col();
 
                     self.current_char_index -= 1;
-                    self.current_col -= 1;
 
                     let mut kind = TokenKind::Identifier;
 
@@ -79,7 +73,7 @@ impl Lexer {
                 // Strings
                 '"' => {
                     let mut eaten_string = String::new();
-                    let start_col = self.current_col;
+                    let start_col = self.current_col();
 
                     self.advance();
                     while self.current_char() != '"' {
@@ -87,18 +81,14 @@ impl Lexer {
 
                         self.advance();
                         if self.is_eof() {
-                            self.throw_err_col(
-                                format!(
+                            self.throw_err(format!(
                                     "Unended string since column {} at line {}",
-                                    start_col, self.current_line_number
-                                ),
-                                start_col,
-                            );
+                                    start_col, self.current_line_number()
+                            ));
                         }
                     }
 
-                    self.current_col -= 1;
-                    let end_col = self.current_col;
+                    let end_col = self.current_col();
 
                     self.push_token(TokenKind::String, eaten_string, start_col, end_col);
                 }
@@ -108,8 +98,8 @@ impl Lexer {
                     self.push_token(
                         TokenKind::Semicolon,
                         self.current_char().to_string(),
-                        self.current_col,
-                        self.current_col,
+                        self.current_col(),
+                        self.current_col(),
                     );
                 }
 
@@ -117,16 +107,16 @@ impl Lexer {
                     self.push_token(
                         TokenKind::Comma,
                         self.current_char().to_string(),
-                        self.current_col,
-                        self.current_col,
+                        self.current_col(),
+                        self.current_col(),
                     );
                 }
                 '(' => {
                     self.push_token(
                         TokenKind::OParen,
                         self.current_char().to_string(),
-                        self.current_col,
-                        self.current_col,
+                        self.current_col(),
+                        self.current_col(),
                     );
                 }
 
@@ -134,8 +124,8 @@ impl Lexer {
                     self.push_token(
                         TokenKind::CParen,
                         self.current_char().to_string(),
-                        self.current_col,
-                        self.current_col,
+                        self.current_col(),
+                        self.current_col(),
                     );
                 }
 
@@ -143,8 +133,8 @@ impl Lexer {
                     self.push_token(
                         TokenKind::OCurly,
                         self.current_char().to_string(),
-                        self.current_col,
-                        self.current_col,
+                        self.current_col(),
+                        self.current_col(),
                     );
                 }
 
@@ -152,18 +142,17 @@ impl Lexer {
                     self.push_token(
                         TokenKind::CCurly,
                         self.current_char().to_string(),
-                        self.current_col,
-                        self.current_col,
+                        self.current_col(),
+                        self.current_col(),
                     );
                 }
 
                 ////////////////////////////////////////////////////
                 '\n' => {
-                    self.current_line_number += 1;
-                    self.current_col = 1;
+                    self.line_start_indices.push(self.current_char_index);
                 }
-
-                ' ' => {}
+                
+                c if c.is_whitespace() => {}
 
                 _ => self.throw_err(format!("Unknown character `{}`", self.current_char())),
             }
@@ -174,8 +163,8 @@ impl Lexer {
         self.push_token(
             TokenKind::Eof,
             String::new(),
-            self.current_col,
-            self.current_col,
+            self.current_col(),
+            self.current_col(),
         )
     }
 
@@ -194,7 +183,6 @@ impl Lexer {
 
     fn advance(&mut self) {
         self.current_char_index += 1;
-        self.current_col += 1;
     }
 
     fn push_token(&mut self, kind: TokenKind, value: String, start_col: usize, end_col: usize) {
@@ -203,35 +191,44 @@ impl Lexer {
             value,
             location: Location {
                 source_code_path: self.source_code_path.clone(),
-                line_number: self.current_line_number,
+                line_number: self.current_line_number(),
                 start_col,
                 end_col,
             },
         })
     }
 
-    fn throw_err<T: std::fmt::Display>(&self, msg: T) {
-        println!("[Error]: {}", msg);
-        println!(
-            "[Location]: {}:{}",
-            self.current_line_number, self.current_col
-        );
-        println!(
-            " {} | {}",
-            self.current_line_number,
-            self.source_code_lines[self.current_line_number - 1].trim_start()
-        );
-        process::exit(1);
+    #[inline]
+    fn current_col(&self) -> usize {
+        self.current_char_index - self.line_start_indices.last().unwrap() + 1
     }
 
-    fn throw_err_col<T: std::fmt::Display>(&self, msg: T, col: usize) {
-        println!("[Error]: {}", msg);
-        println!("[Location]: {}:{}", self.current_line_number, col);
+    #[inline]
+    fn current_line_number(&self) -> usize {
+        self.line_start_indices.len()
+    }
+
+    #[inline]
+    fn current_line(&self) -> String {
+        self.source_code_lines[self.current_line_number() - 1].clone()
+    }
+
+    fn throw_err<T: Into<String>>(&self, msg: T) {
+        let current_line_number = self.current_line_number();
+        let current_line_number_spaces = " ".repeat(current_line_number.to_string().len());
+        let current_col = self.current_col();
+        let arrow_spaces = " ".repeat(current_col - 1);
+
+        println!("[Error]");
+        println!("{}\n", msg.into());
         println!(
-            " {} | {}",
-            self.current_line_number,
-            self.source_code_lines[self.current_line_number - 1].trim_start()
+            "[Location] {}:{}:{}",
+            self.source_code_path, current_line_number, current_col
         );
-        process::exit(1);
+        println!(" {} |", current_line_number_spaces);
+        println!(" {} | {}", current_line_number, self.current_line(),);
+        println!(" {} | {}^", current_line_number_spaces, arrow_spaces);
+
+        std::process::exit(1);
     }
 }

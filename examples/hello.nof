@@ -1,4 +1,4 @@
-include std;
+#includef std;
 
 void main() {
     print "Hello World";
