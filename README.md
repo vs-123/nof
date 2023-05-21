@@ -18,7 +18,7 @@ void main() {
 }
 ```
 
-###### Misc.
+### Misc.
 I initially wanted to make a small language that looked like C so I started making this but then I forgot since the next day
 
 I recently rediscovered this after scrolling through my old projects
