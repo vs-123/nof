@@ -20,7 +20,9 @@ void main() {
 
 ### Status
 
-Rewriting the lexer
+Rewrote the lexer
+
+Now implementing the parser
 
 ### Misc.
 I initially wanted to make a small language that looked like C so I started making this, but then I forgot about it since the next day

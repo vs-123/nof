@@ -210,8 +210,8 @@ impl Parser {
         println!(
             " {} |{}{}",
             line_number_spaces,
-            " ".repeat(current_token_location.start_col - 1),
-            "^".repeat(current_token_location.end_col - current_token_location.start_col)
+            " ".repeat(current_token_location.start_col),
+            "^".repeat(current_token_location.end_col - current_token_location.start_col + 1)
         );
         println!(" {} |", line_number_spaces);
         process::exit(1);

@@ -15,12 +15,13 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub fn new(source_code: String, file_path: String) -> Self {        
+    pub fn new(source_code: String, file_path: String) -> Self {     
+        let source_code_chars: Vec<char> = source_code.chars().collect();
         Self {
             output_tokens: Vec::new(),
 
-            source_code_length: source_code.len(),
-            source_code_chars: source_code.chars().collect(),
+            source_code_length: source_code_chars.len(),
+            source_code_chars: source_code_chars,
             source_code_lines: source_code.split("\n").map(String::from).collect(),
 
             current_char_index: 0,
@@ -40,10 +41,66 @@ impl Lexer {
                     self.eat_identifier();
                 }
 
+                '"' => {
+                    self.eat_string();
+                }
+
                 ';' => {
                     self.output_tokens.push(Token {
                         kind: TokenKind::Semicolon,
                         value: ";".to_string(),
+                        location: Location {
+                            source_code_path: self.source_code_path.clone(),
+                            line_number: self.current_line_number(),
+                            start_col: self.current_col(),
+                            end_col: self.current_col(),
+                        }
+                    });
+                }
+
+                '(' => {
+                    self.output_tokens.push(Token {
+                        kind: TokenKind::OParen,
+                        value: "(".to_string(),
+                        location: Location {
+                            source_code_path: self.source_code_path.clone(),
+                            line_number: self.current_line_number(),
+                            start_col: self.current_col(),
+                            end_col: self.current_col(),
+                        }
+                    });
+                }
+
+                ')' => {
+                    self.output_tokens.push(Token {
+                        kind: TokenKind::CParen,
+                        value: ")".to_string(),
+                        location: Location {
+                            source_code_path: self.source_code_path.clone(),
+                            line_number: self.current_line_number(),
+                            start_col: self.current_col(),
+                            end_col: self.current_col(),
+                        }
+                    });
+                }
+
+                '{' => {
+                    self.output_tokens.push(Token {
+                        kind: TokenKind::OCurly,
+                        value: "{".to_string(),
+                        location: Location {
+                            source_code_path: self.source_code_path.clone(),
+                            line_number: self.current_line_number(),
+                            start_col: self.current_col(),
+                            end_col: self.current_col(),
+                        }
+                    });
+                }
+
+                '}' => {
+                    self.output_tokens.push(Token {
+                        kind: TokenKind::CCurly,
+                        value: "}".to_string(),
                         location: Location {
                             source_code_path: self.source_code_path.clone(),
                             line_number: self.current_line_number(),
@@ -103,6 +160,38 @@ impl Lexer {
         })
     }
 
+    fn eat_string(&mut self) {
+        let start_col = self.current_col();
+        let start_line = self.current_line_number();
+
+        let mut eaten_string = String::new();
+
+        self.current_char_index += 1;
+        while self.current_char() != '"' {
+            eaten_string.push(self.current_char());
+            if self.is_eof() {
+                self.throw_err_custom_pointer(format!(
+                    "Unended string since line {}, column {}\n\n[Help]\n{}",
+                    start_line, start_col,
+                    "Consider adding a '\"' when the string ends."
+                ), start_col);
+            }
+            self.current_char_index += 1;
+        }
+
+        self.output_tokens.push(Token {
+            kind: TokenKind::Identifier,
+            value: eaten_string,
+            location: Location {
+                start_col,
+                end_col: self.current_col(),
+                line_number: self.current_line_number(),
+
+                source_code_path: self.source_code_path.clone(),
+            },
+        })
+    }
+
     #[inline]
     fn is_not_eof(&self) -> bool {
         self.current_char_index < self.source_code_length
@@ -138,6 +227,25 @@ impl Lexer {
         let current_line_number_spaces = " ".repeat(current_line_number.to_string().len());
         let current_col = self.current_col();
         let mut arrow_spaces = " ".repeat(current_col);
+
+        println!("[Error]");
+        println!("{}\n", msg.into());
+        println!(
+            "[Location] {}:{}:{}",
+            self.source_code_path, current_line_number, current_col
+        );
+        println!(" {} |", current_line_number_spaces);
+        println!(" {} | {}", current_line_number, self.current_line());
+        println!(" {} |{}^", current_line_number_spaces, arrow_spaces);
+
+        std::process::exit(1);
+    }
+
+    fn throw_err_custom_pointer<T: Into<String>>(&self, msg: T, pointer_position: usize) {
+        let current_line_number = self.current_line_number();
+        let current_line_number_spaces = " ".repeat(current_line_number.to_string().len());
+        let current_col = self.current_col();
+        let mut arrow_spaces = " ".repeat(pointer_position);
 
         println!("[Error]");
         println!("{}\n", msg.into());
