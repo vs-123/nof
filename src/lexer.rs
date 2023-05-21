@@ -40,6 +40,19 @@ impl Lexer {
                     self.eat_identifier();
                 }
 
+                ';' => {
+                    self.output_tokens.push(Token {
+                        kind: TokenKind::Semicolon,
+                        value: ";".to_string(),
+                        location: Location {
+                            source_code_path: self.source_code_path.clone(),
+                            line_number: self.current_line_number(),
+                            start_col: self.current_col(),
+                            end_col: self.current_col(),
+                        }
+                    });
+                }
+
                 other => {
                     self.throw_err(format!(
                         "Unexpected character '{}'",
@@ -56,17 +69,22 @@ impl Lexer {
         self.current_char_index += 1;
 
         if self.is_not_eof() && self.current_char() == '\n' {
-            self.line_start_indices.push(self.current_char_index);
+            self.line_start_indices.push(self.current_char_index + 1);
             self.next();
         }
     }
 
     fn eat_identifier(&mut self) {
-        let mut eaten_identifier = String::new();
         let start_col = self.current_col();
+        let start_line = self.current_line_number();
+
+        let mut eaten_identifier = String::new();
 
         while self.current_char().is_alphanumeric() {
             eaten_identifier.push(self.current_char());
+            if self.is_eof() {
+                break;
+            }
             self.current_char_index += 1;
         }
 
@@ -76,12 +94,13 @@ impl Lexer {
             kind: TokenKind::Identifier,
             value: eaten_identifier,
             location: Location {
-                source_code_path: self.source_code_path.clone(),
-                line_number: self.current_line_number(),
-                start_col: start_col,
+                start_col,
                 end_col: self.current_col(),
-            }
-        });
+                line_number: self.current_line_number(),
+
+                source_code_path: self.source_code_path.clone(),
+            },
+        })
     }
 
     #[inline]
@@ -118,7 +137,7 @@ impl Lexer {
         let current_line_number = self.current_line_number();
         let current_line_number_spaces = " ".repeat(current_line_number.to_string().len());
         let current_col = self.current_col();
-        let arrow_spaces = " ".repeat(current_col - 1);
+        let mut arrow_spaces = " ".repeat(current_col);
 
         println!("[Error]");
         println!("{}\n", msg.into());
@@ -127,8 +146,8 @@ impl Lexer {
             self.source_code_path, current_line_number, current_col
         );
         println!(" {} |", current_line_number_spaces);
-        println!(" {} | {}", current_line_number, self.current_line(),);
-        println!(" {} | {}^", current_line_number_spaces, arrow_spaces);
+        println!(" {} | {}", current_line_number, self.current_line());
+        println!(" {} |{}^", current_line_number_spaces, arrow_spaces);
 
         std::process::exit(1);
     }
